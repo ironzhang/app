@@ -11,15 +11,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ironzhang/x-pearls/config"
+	"github.com/ironzhang/pluginapp/jsonconfig"
 	"github.com/ironzhang/x-pearls/log"
 )
 
 var exit = os.Exit
 
 var G Application
-
-type Config interface{}
 
 type Plugin interface {
 	Name() string
@@ -45,12 +43,14 @@ type Application struct {
 	CommandLine *flag.FlagSet
 	Options     Options
 	VersionInfo func() string
+	LoadConfig  func(filename string, configs map[string]interface{}) error
+	WriteConfig func(filename string, configs map[string]interface{}) error
 
-	configs map[string]Config
+	configs map[string]interface{}
 	plugins []Plugin
 }
 
-func (app *Application) Register(p Plugin, c Config) {
+func (app *Application) Register(p Plugin, c interface{}) {
 	for _, v := range app.plugins {
 		if v.Name() == p.Name() {
 			panic(fmt.Sprintf("%q plugin is registered", p.Name()))
@@ -59,7 +59,7 @@ func (app *Application) Register(p Plugin, c Config) {
 	app.plugins = append(app.plugins, p)
 
 	if app.configs == nil {
-		app.configs = make(map[string]Config)
+		app.configs = make(map[string]interface{})
 	}
 	if c != nil {
 		app.configs[p.Name()] = c
@@ -101,8 +101,10 @@ func (app *Application) setupCommandLine() {
 	if app.VersionInfo != nil {
 		app.CommandLine.BoolVar(&app.Options.Version, "version", app.Options.Version, "输出版本信息")
 	}
-	app.CommandLine.StringVar(&app.Options.ConfigFile, "config-file", app.Options.ConfigFile, "指定配置文件")
-	app.CommandLine.StringVar(&app.Options.ConfigExample, "config-example", app.Options.ConfigExample, "生成配置示例")
+	if len(app.configs) > 0 {
+		app.CommandLine.StringVar(&app.Options.ConfigFile, "config-file", app.Options.ConfigFile, "指定配置文件")
+		app.CommandLine.StringVar(&app.Options.ConfigExample, "config-example", app.Options.ConfigExample, "生成配置示例")
+	}
 
 	for _, p := range app.plugins {
 		if f, ok := p.(Flagger); ok {
@@ -132,7 +134,10 @@ func (app *Application) doCommand() (err error) {
 		fmt.Fprintf(os.Stdout, "%s", app.VersionInfo())
 		quit = true
 	} else if app.Options.ConfigExample != "" {
-		if err = config.WriteToFile(app.Options.ConfigExample, app.configs); err != nil {
+		if app.WriteConfig == nil {
+			app.WriteConfig = jsonconfig.Write
+		}
+		if err = app.WriteConfig(app.Options.ConfigExample, app.configs); err != nil {
 			return fmt.Errorf("generate config example: %v", err)
 		}
 		fmt.Fprintf(os.Stdout, "generate config example %s success\n", app.Options.ConfigExample)
@@ -146,11 +151,17 @@ func (app *Application) doCommand() (err error) {
 	return nil
 }
 
-func (app *Application) loadConfig() error {
+func (app *Application) loadConfig() (err error) {
 	if app.Options.ConfigFile == "" {
 		return nil
 	}
-	return config.LoadFromFile(app.Options.ConfigFile, &app.configs)
+	if len(app.configs) <= 0 {
+		return nil
+	}
+	if app.LoadConfig == nil {
+		app.LoadConfig = jsonconfig.Load
+	}
+	return app.LoadConfig(app.Options.ConfigFile, app.configs)
 }
 
 func (app *Application) configInfo() string {
