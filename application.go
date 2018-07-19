@@ -2,7 +2,6 @@ package pluginapp
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -11,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ironzhang/pluginapp/jsonconfig"
+	"github.com/ironzhang/pluginapp/configurator/jsonc"
 	"github.com/ironzhang/x-pearls/log"
 )
 
@@ -33,6 +32,12 @@ type Runner interface {
 	Run(ctx context.Context) error
 }
 
+type Configurator interface {
+	ToString(configs map[string]interface{}) string
+	WriteToFile(filename string, configs map[string]interface{}) error
+	LoadFromFile(filename string, configs map[string]interface{}) error
+}
+
 type Options struct {
 	Version       bool
 	ConfigFile    string
@@ -40,14 +45,20 @@ type Options struct {
 }
 
 type Application struct {
-	CommandLine *flag.FlagSet
-	Options     Options
-	VersionInfo func() string
-	LoadConfig  func(filename string, configs map[string]interface{}) error
-	WriteConfig func(filename string, configs map[string]interface{}) error
+	CommandLine  *flag.FlagSet
+	Options      Options
+	Configurator Configurator
+	VersionInfo  func() string
 
 	configs map[string]interface{}
 	plugins []Plugin
+}
+
+func (app *Application) ConfigInfo() string {
+	if app.Configurator == nil {
+		app.Configurator = jsonc.Configurator
+	}
+	return app.Configurator.ToString(app.configs)
 }
 
 func (app *Application) Register(p Plugin, c interface{}) {
@@ -134,10 +145,10 @@ func (app *Application) doCommand() (err error) {
 		fmt.Fprintf(os.Stdout, "%s", app.VersionInfo())
 		quit = true
 	} else if app.Options.ConfigExample != "" {
-		if app.WriteConfig == nil {
-			app.WriteConfig = jsonconfig.Write
+		if app.Configurator == nil {
+			app.Configurator = jsonc.Configurator
 		}
-		if err = app.WriteConfig(app.Options.ConfigExample, app.configs); err != nil {
+		if err = app.Configurator.WriteToFile(app.Options.ConfigExample, app.configs); err != nil {
 			return fmt.Errorf("generate config example: %v", err)
 		}
 		fmt.Fprintf(os.Stdout, "generate config example %s success\n", app.Options.ConfigExample)
@@ -158,15 +169,10 @@ func (app *Application) loadConfig() (err error) {
 	if len(app.configs) <= 0 {
 		return nil
 	}
-	if app.LoadConfig == nil {
-		app.LoadConfig = jsonconfig.Load
+	if app.Configurator == nil {
+		app.Configurator = jsonc.Configurator
 	}
-	return app.LoadConfig(app.Options.ConfigFile, app.configs)
-}
-
-func (app *Application) configInfo() string {
-	data, _ := json.MarshalIndent(app.configs, "", "\t")
-	return string(data)
+	return app.Configurator.LoadFromFile(app.Options.ConfigFile, app.configs)
 }
 
 func (app *Application) printInfo() {
@@ -174,7 +180,7 @@ func (app *Application) printInfo() {
 		log.Infof("version info:\n%s", app.VersionInfo())
 	}
 	if len(app.configs) > 0 {
-		log.Infof("config info:\n%s", app.configInfo())
+		log.Infof("config info:\n%s", app.ConfigInfo())
 	}
 }
 

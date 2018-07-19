@@ -5,8 +5,6 @@ import (
 	"os"
 
 	"github.com/ironzhang/pluginapp"
-	"github.com/ironzhang/x-pearls/config"
-	"github.com/ironzhang/x-pearls/config/tomlcfg"
 )
 
 type Config struct {
@@ -45,6 +43,5 @@ func init() {
 }
 
 func main() {
-	config.Default = tomlcfg.TOML
 	pluginapp.G.Main(os.Args)
 }
