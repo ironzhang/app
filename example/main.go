@@ -5,7 +5,12 @@ import (
 	"os"
 
 	"github.com/ironzhang/pluginapp"
+	"github.com/ironzhang/pluginapp/configurator/tomlc"
 )
+
+type Options struct {
+	Development bool
+}
 
 type Config struct {
 	Environment string
@@ -14,15 +19,20 @@ type Config struct {
 }
 
 type Plugin struct {
-	Config Config
+	Options Options
+	Config  Config
 }
 
 func (p *Plugin) Name() string {
 	return "main"
 }
 
+func (p *Plugin) SetFlags(fs *pluginapp.FlagSet) {
+	fs.BoolVar(&p.Options.Development, "development", false, "启动开发模式")
+}
+
 func (p *Plugin) Init() error {
-	fmt.Println(p.Config.Environment, p.Config.Node, p.Config.Addr)
+	fmt.Println(p.Options.Development, p.Config.Environment, p.Config.Node, p.Config.Addr)
 	return nil
 }
 
@@ -43,5 +53,7 @@ func init() {
 }
 
 func main() {
+	pluginapp.G.VersionInfo = func() string { return "v0.0.1\n" }
+	pluginapp.G.Configurator = tomlc.Configurator
 	pluginapp.G.Main(os.Args)
 }
