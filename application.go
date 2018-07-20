@@ -16,44 +16,63 @@ import (
 
 var exit = os.Exit
 
+// G 应用框架全局对象
 var G Application
 
+// Plugin 插件接口
 type Plugin interface {
 	Name() string
 	Init() error
 	Fini() error
 }
 
+// Flagger 实现该接口的插件可通过fs设置命令行参数
 type Flagger interface {
 	SetFlags(fs *FlagSet)
 }
 
+// Runner 每一个实现该接口的插件都会有一个后台goroutine运行该接口.
+// 当程序结束时, 会调用ctx的cancel来通知插件程序结束运行.
 type Runner interface {
 	Run(ctx context.Context) error
 }
 
+// Configurator 配置器接口
 type Configurator interface {
 	ToString(configs map[string]interface{}) string
 	WriteToFile(filename string, configs map[string]interface{}) error
 	LoadFromFile(filename string, configs map[string]interface{}) error
 }
 
+// Options 框架定义的命令行选项
 type Options struct {
 	Version       bool
 	ConfigFile    string
 	ConfigExample string
 }
 
+// Application 应用框架
 type Application struct {
-	CommandLine  *flag.FlagSet
-	Options      Options
-	Configurator Configurator
-	VersionInfo  func() string
+	// 命令行FlagSet, 默认使用flag.CommandLine
+	CommandLine *flag.FlagSet
 
+	// 框架命令行选项
+	Options Options
+
+	// 配置器, 默认使用jsonc.Configurator
+	Configurator Configurator
+
+	// 版本信息函数, 为nil则无法输出版本信息
+	VersionInfo func() string
+
+	// 配置
 	configs map[string]interface{}
+
+	// 插件列表
 	plugins []Plugin
 }
 
+// ConfigInfo 配置信息
 func (app *Application) ConfigInfo() string {
 	if app.Configurator == nil {
 		app.Configurator = jsonc.Configurator
@@ -61,6 +80,7 @@ func (app *Application) ConfigInfo() string {
 	return app.Configurator.ToString(app.configs)
 }
 
+// Register 注册插件
 func (app *Application) Register(p Plugin, c interface{}) {
 	for _, v := range app.plugins {
 		if v.Name() == p.Name() {
@@ -77,6 +97,7 @@ func (app *Application) Register(p Plugin, c interface{}) {
 	}
 }
 
+// Main 运行主程序
 func (app *Application) Main(args []string) {
 	var err error
 
@@ -211,9 +232,9 @@ func (app *Application) runPlugins() (err error) {
 	for _, p := range app.plugins {
 		if r, ok := p.(Runner); ok {
 			wg.Add(1)
-			go func(name string, runner Runner) {
-				if err := runner.Run(ctx); err != nil {
-					quit <- fmt.Errorf("run %s plugin: %v", name, err)
+			go func(n string, r Runner) {
+				if err := r.Run(ctx); err != nil {
+					quit <- fmt.Errorf("run %s plugin: %v", n, err)
 				}
 				wg.Done()
 			}(p.Name(), r)

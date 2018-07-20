@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// FlagSet 类似flag.FlagSet, 插件定义命令行参数时使用
 type FlagSet struct {
 	prefix  string
 	flagset *flag.FlagSet
