@@ -246,7 +246,7 @@ func (app *Application) runPlugins() (err error) {
 	}()
 
 	// fini plugins
-	err = <-quit
+	rerr := <-quit
 	for i := len(app.plugins) - 1; i >= 0; i-- {
 		p := app.plugins[i]
 		if err = p.Fini(); err != nil {
@@ -255,5 +255,7 @@ func (app *Application) runPlugins() (err error) {
 		}
 		log.Debugw("fini success", "plugin", p.Name())
 	}
-	return err
+	time.Sleep(100 * time.Millisecond)
+
+	return rerr
 }

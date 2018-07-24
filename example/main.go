@@ -6,6 +6,8 @@ import (
 
 	"github.com/ironzhang/pluginapp"
 	"github.com/ironzhang/pluginapp/configurator/tomlc"
+
+	_ "github.com/ironzhang/pluginapp/plugins/backend"
 )
 
 type Options struct {
